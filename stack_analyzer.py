@@ -332,10 +332,6 @@ def generate_json_report(stack_usages: List[StackUsage], call_graphs: List[CallG
 
         report_data.append(entry)
 
-    # Sort by total stack usage (descending)
-    # Changed to sort first by function name and then by file
-    report_data.sort(key=lambda x: (x.function.name, x.function.file))
-
     return report_data
 
 def main():
@@ -361,6 +357,7 @@ def main():
 
     # Generate JSON report
     report_data = generate_json_report(stack_usages, call_graphs)
+    report_data.sort(key=lambda x: (x.function.file, x.function.name))
     json_data = [report.serialize() for report in report_data]
     with open(args.output, 'w') as file:
         json.dump(json_data, file, indent=2)
