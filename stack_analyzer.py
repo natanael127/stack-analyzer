@@ -40,7 +40,7 @@ class CflowLine:
 @dataclass
 class CalledFunction:
     function: Function
-    total_usage: int
+    total_stack: StackData
 
 @dataclass
 class FunctionReport:
@@ -281,11 +281,11 @@ def generate_json_report(stack_usages: List[StackUsage], call_graphs: List[CallG
 
         if call_graph:
             for called_func in call_graph.calls:
-                # Calculate total usage for called function
-                called_total = get_total_stack(called_func, call_graph_map, stack_usage_map)
                 called_functions.append(CalledFunction(
                     function=called_func,
-                    total_usage=called_total.usage
+                    total_stack=get_total_stack(
+                        called_func, call_graph_map, stack_usage_map
+                    )
                 ))
         # Create the entry for this function
         entry = FunctionReport(
@@ -325,7 +325,7 @@ def save_json_report(report_data: List[FunctionReport], output_path: str):
                 {
                     "file": called.function.file,
                     "function": called.function.name,
-                    "total_usage": called.total_usage
+                    "total": called.total_stack.serialize()
                 }
                 # Sort called_functions before adding to dictionary
                 for called in sorted(report.called_functions, 
