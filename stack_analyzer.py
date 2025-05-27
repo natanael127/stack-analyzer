@@ -338,23 +338,6 @@ def generate_json_report(stack_usages: List[StackUsage], call_graphs: List[CallG
 
     return report_data
 
-def save_json_report(report_data: List[FunctionReport], output_path: str):
-    """
-    Saves the JSON report to a file.
-    
-    Args:
-        report_data: List of report data
-        output_path: Path where the file will be saved
-    """
-    # Sort report_data before serializing
-    report_data.sort(key=lambda x: (x.function.file, x.function.name))
-
-    # Use the serialize methods to convert objects to dictionaries
-    json_data = [report.serialize() for report in report_data]
-
-    with open(output_path, 'w') as file:
-        json.dump(json_data, file, indent=2)
-
 def main():
     """
     Main function that processes command-line arguments and executes stack usage analysis.
@@ -378,9 +361,9 @@ def main():
 
     # Generate JSON report
     report_data = generate_json_report(stack_usages, call_graphs)
-
-    # Save to output file
-    save_json_report(report_data, args.output)
+    json_data = [report.serialize() for report in report_data]
+    with open(args.output, 'w') as file:
+        json.dump(json_data, file, indent=2)
     print(f"JSON report saved to {args.output}")
 
 if __name__ == "__main__":
