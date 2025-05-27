@@ -281,7 +281,6 @@ def generate_json_report(stack_usages: List[StackUsage], call_graphs: List[CallG
 
         if call_graph:
             for called_func in call_graph.calls:
-                called_key = f"{called_func.name}:{called_func.file}"
                 # Calculate total usage for called function
                 called_total = calculate_total_stack_usage(called_func, call_graph_map, stack_usage_map)
                 called_functions.append(CalledFunction(
