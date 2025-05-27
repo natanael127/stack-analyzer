@@ -68,7 +68,7 @@ The tool generates a JSON file with the following structure:
   {
     "file": "source_file.c",
     "function": "function_name",
-    "direct_usage": 48,
+    "self_usage": 48,
     "total_usage": 184,
     "type": "dynamic",
     "called_functions": [

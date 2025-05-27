@@ -34,7 +34,7 @@ class CalledFunction:
 @dataclass
 class FunctionReport:
     function: Function
-    direct_usage: int
+    self_usage: int
     total_usage: int
     type: str
     called_functions: List[CalledFunction]
@@ -248,7 +248,7 @@ def generate_json_report(stack_usages: List[StackUsage], call_graphs: List[CallG
         # Create the entry for this function
         entry = FunctionReport(
             function=su.function,
-            direct_usage=su.usage,
+            self_usage=su.usage,
             total_usage=total_usage,
             type=su.type,
             called_functions=called_functions
@@ -278,7 +278,7 @@ def save_json_report(report_data: List[FunctionReport], output_path: str):
         {
             "file": report.function.file,
             "function": report.function.name,
-            "direct_usage": report.direct_usage,
+            "self_usage": report.self_usage,
             "total_usage": report.total_usage,
             "type": report.type,
             "called_functions": [
