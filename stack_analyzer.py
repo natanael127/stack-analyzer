@@ -7,8 +7,8 @@ from typing import List, Dict, Optional, Set
 
 @dataclass
 class Function:
-    source_file: str
-    function_name: str
+    name: str
+    file: str
 
 @dataclass
 class StackUsage:
@@ -23,20 +23,17 @@ class CallGraph:
 
 @dataclass
 class CflowLine:
+    function: Function
     indent_level: int
-    function_name: str
-    source_file: str
 
 @dataclass
 class CalledFunction:
-    name: str
-    file: str
+    function: Function
     total_usage: int
 
 @dataclass
 class FunctionReport:
-    name: str
-    file: str
+    function: Function
     direct_usage: int
     total_usage: int
     type: str
@@ -60,7 +57,7 @@ def parse_su_file(file_path: str) -> List[StackUsage]:
             match = re.match(r'([^:]+):(\d+):(\d+):(\S+)\s+(\d+)\s+(\S+)', line.strip())
             if match:
                 source_file, _, _, function_name, usage, usage_type = match.groups()
-                function = Function(source_file=source_file, function_name=function_name)
+                function = Function(file=source_file, name=function_name)
                 stack_usage = StackUsage(
                     function=function,
                     usage=int(usage),
@@ -111,8 +108,7 @@ def parse_cflow_line(line: str) -> Optional[CflowLine]:
         source_file = match.group(3)
         return CflowLine(
             indent_level=indent_level,
-            function_name=function_name,
-            source_file=source_file
+            function=Function(name=function_name, file=source_file)
         )
     return None
 
@@ -135,10 +131,7 @@ def parse_cflow_file(file_path: str) -> List[CallGraph]:
             if not parsed:
                 continue
 
-            current_function = Function(
-                source_file=parsed.source_file, 
-                function_name=parsed.function_name
-            )
+            current_function = parsed.function
 
             # Adjust call stack based on indentation level
             while len(call_stack) > parsed.indent_level:
@@ -152,8 +145,8 @@ def parse_cflow_file(file_path: str) -> List[CallGraph]:
 
                 if parent_graph:
                     # Check if this function call is already in the parent's calls
-                    if not any(f.function_name == current_function.function_name and 
-                               f.source_file == current_function.source_file for f in parent_graph.calls):
+                    if not any(f.name == current_function.name and 
+                               f.file == current_function.file for f in parent_graph.calls):
                         parent_graph.calls.append(current_function)
                 else:
                     # Create new CallGraph for this parent
@@ -186,7 +179,7 @@ def calculate_total_stack_usage(function: Function, call_graph_map: Dict[str, Ca
         visited = set()
 
     # Create a unique key for the function
-    function_key = f"{function.function_name}:{function.source_file}"
+    function_key = f"{function.name}:{function.file}"
 
     # If we've already visited this function, return 0 to avoid double counting
     if function_key in visited:
@@ -206,7 +199,7 @@ def calculate_total_stack_usage(function: Function, call_graph_map: Dict[str, Ca
     # Calculate the maximum stack usage of any call path
     max_call_path_usage = 0
     for called_function in call_graph.calls:
-        called_key = f"{called_function.function_name}:{called_function.source_file}"
+        called_key = f"{called_function.name}:{called_function.file}"
         # Skip self-recursive calls as they're already accounted for in the base usage
         if called_key != function_key:
             call_usage = calculate_total_stack_usage(called_function, call_graph_map, stack_usage_map, visited.copy())
@@ -226,9 +219,9 @@ def generate_json_report(stack_usages: List[StackUsage], call_graphs: List[CallG
         List of FunctionReport objects with stack usage information for each function
     """
     # Create mapping for easier lookup
-    stack_usage_map = {f"{su.function.function_name}:{su.function.source_file}": su.usage for su in stack_usages}
-    stack_type_map = {f"{su.function.function_name}:{su.function.source_file}": su.type for su in stack_usages}
-    call_graph_map = {f"{cg.function.function_name}:{cg.function.source_file}": cg for cg in call_graphs}
+    stack_usage_map = {f"{su.function.name}:{su.function.file}": su.usage for su in stack_usages}
+    stack_type_map = {f"{su.function.name}:{su.function.file}": su.type for su in stack_usages}
+    call_graph_map = {f"{cg.function.name}:{cg.function.file}": cg for cg in call_graphs}
 
     # Create the report data
     report_data = []
@@ -238,25 +231,23 @@ def generate_json_report(stack_usages: List[StackUsage], call_graphs: List[CallG
         total_usage = calculate_total_stack_usage(su.function, call_graph_map, stack_usage_map)
 
         # Get the list of called functions
-        function_key = f"{su.function.function_name}:{su.function.source_file}"
+        function_key = f"{su.function.name}:{su.function.file}"
         call_graph = call_graph_map.get(function_key)
         called_functions = []
 
         if call_graph:
             for called_func in call_graph.calls:
-                called_key = f"{called_func.function_name}:{called_func.source_file}"
+                called_key = f"{called_func.name}:{called_func.file}"
                 # Calculate total usage for called function
                 called_total_usage = calculate_total_stack_usage(called_func, call_graph_map, stack_usage_map)
                 called_functions.append(CalledFunction(
-                    name=called_func.function_name,
-                    file=called_func.source_file,
+                    function=called_func,
                     total_usage=called_total_usage
                 ))
 
         # Create the entry for this function
         entry = FunctionReport(
-            name=su.function.function_name,
-            file=su.function.source_file,
+            function=su.function,
             direct_usage=su.usage,
             total_usage=total_usage,
             type=su.type,
@@ -267,7 +258,7 @@ def generate_json_report(stack_usages: List[StackUsage], call_graphs: List[CallG
 
     # Sort by total stack usage (descending)
     # Changed to sort first by function name and then by file
-    report_data.sort(key=lambda x: (x.name, x.file))
+    report_data.sort(key=lambda x: (x.function.name, x.function.file))
 
     return report_data
 
@@ -282,18 +273,18 @@ def save_json_report(report_data: List[FunctionReport], output_path: str):
     # Convert dataclass objects to dictionaries for JSON serialization
     json_data = [
         {
-            "file": report.file,
-            "function": report.name,
+            "file": report.function.file,
+            "function": report.function.name,
             "direct_usage": report.direct_usage,
             "total_usage": report.total_usage,
             "type": report.type,
             "called_functions": sorted([
                 {
-                    "file": func.file,
-                    "function": func.name,
-                    "total_usage": func.total_usage
+                    "file": called.function.file,
+                    "function": called.function.name,
+                    "total_usage": called.total_usage
                 }
-                for func in report.called_functions
+                for called in report.called_functions
             ], key=lambda x: (x["file"], x["function"]))
         }
         for report in report_data
