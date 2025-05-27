@@ -61,27 +61,4 @@ cflow --all --format=gnu --print-level <source-files> > callgraph.txt
 
 ## Output Format
 
-The tool generates a JSON file with the following structure:
-
-```json
-[
-  {
-    "file": "source_file.c",
-    "function": "function_name",
-    "self_usage": 48,
-    "total_usage": 184,
-    "type": "dynamic",
-    "called_functions": [
-      {
-        "file": "other_file.c",
-        "function": "called_function",
-        "total_usage": 136
-      }
-    ]
-  }
-]
-```
-
-## License
-
-This project is licensed under the terms of the license included in the repository.
+The tool generates a JSON file with stack info of each found function.
