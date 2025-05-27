@@ -288,7 +288,7 @@ def get_function_key(function: Function) -> str:
     """
     return f"{function.name}:{function.file}"
 
-def generate_json_report(stack_usages: List[StackUsage], call_graphs: List[CallGraph]) -> List[FunctionReport]:
+def generate_report_data(stack_usages: List[StackUsage], call_graphs: List[CallGraph]) -> List[FunctionReport]:
     """
     Generates a JSON report with stack analysis data.
     
@@ -334,6 +334,19 @@ def generate_json_report(stack_usages: List[StackUsage], call_graphs: List[CallG
 
     return report_data
 
+def save_json_report(report_data: List[FunctionReport], output_path: str):
+    """
+    Saves the JSON report to a file.
+
+    Args:
+        report_data: List of FunctionReport objects
+        output_path: Path where the file will be saved
+    """
+    report_data.sort(key=lambda x: (x.function.file, x.function.name))
+    json_data = [report.serialize() for report in report_data]
+    with open(output_path, 'w') as file:
+        json.dump(json_data, file, indent=2)
+
 def main():
     """
     Main function that processes command-line arguments and executes stack usage analysis.
@@ -347,20 +360,13 @@ def main():
 
     args = parser.parse_args()
 
-    # Find and parse .su files
     stack_usages = find_su_files(args.su_dir)
     print(f"Found {len(stack_usages)} stack usage records")
 
-    # Parse cflow file
     call_graphs = parse_cflow_file(args.cflow_file)
     print(f"Found {len(call_graphs)} call graph entries")
 
-    # Generate JSON report
-    report_data = generate_json_report(stack_usages, call_graphs)
-    report_data.sort(key=lambda x: (x.function.file, x.function.name))
-    json_data = [report.serialize() for report in report_data]
-    with open(args.output, 'w') as file:
-        json.dump(json_data, file, indent=2)
+    save_json_report(generate_report_data(stack_usages, call_graphs), args.output)
     print(f"JSON report saved to {args.output}")
 
 if __name__ == "__main__":
