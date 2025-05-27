@@ -11,10 +11,21 @@ class Function:
     file: str
 
 @dataclass
+class StackData:
+    usage: int
+    static: bool
+    bounded: bool
+    def serialize(self):
+        return {
+            "usage": self.usage,
+            "static": self.static,
+            "bounded": self.bounded
+        }
+
+@dataclass
 class StackUsage:
     function: Function
-    usage: int
-    type: str
+    stack: StackData
 
 @dataclass
 class CallGraph:
@@ -24,19 +35,18 @@ class CallGraph:
 @dataclass
 class CflowLine:
     function: Function
-    indent_level: int
+    level: int
 
 @dataclass
 class CalledFunction:
     function: Function
-    total_usage: int
+    total_stack: StackData
 
 @dataclass
 class FunctionReport:
     function: Function
-    self_usage: int
-    total_usage: int
-    type: str
+    self_stack: StackData
+    total_stack: StackData
     called_functions: List[CalledFunction]
 
 def parse_su_file(file_path: str) -> List[StackUsage]:
@@ -58,10 +68,20 @@ def parse_su_file(file_path: str) -> List[StackUsage]:
             if match:
                 source_file, _, _, function_name, usage, usage_type = match.groups()
                 function = Function(file=source_file, name=function_name)
+                is_static = False
+                explicitly_bounded = False
+                if "static" in usage_type:
+                    is_static = True
+                if "bounded" in usage_type:
+                    explicitly_bounded = True
+                stack_data = StackData(
+                    usage=int(usage),
+                    static=is_static,
+                    bounded=explicitly_bounded or is_static
+                )
                 stack_usage = StackUsage(
                     function=function,
-                    usage=int(usage),
-                    type=usage_type
+                    stack=stack_data
                 )
                 stack_usages.append(stack_usage)
 
@@ -107,7 +127,7 @@ def parse_cflow_line(line: str) -> Optional[CflowLine]:
         function_name = match.group(2)
         source_file = match.group(3)
         return CflowLine(
-            indent_level=indent_level,
+            level=indent_level,
             function=Function(name=function_name, file=source_file)
         )
     return None
@@ -134,11 +154,11 @@ def parse_cflow_file(file_path: str) -> List[CallGraph]:
             current_function = parsed.function
 
             # Adjust call stack based on indentation level
-            while len(call_stack) > parsed.indent_level:
+            while len(call_stack) > parsed.level:
                 call_stack.pop()
 
             # Create CallGraph entry for the parent function if it exists
-            if call_stack and parsed.indent_level > 0:
+            if call_stack and parsed.level > 0:
                 parent = call_stack[-1]
                 # Find if we already have a CallGraph for this parent
                 parent_graph = next((cg for cg in call_graphs if cg.function == parent), None)
@@ -156,20 +176,20 @@ def parse_cflow_file(file_path: str) -> List[CallGraph]:
             call_stack.append(current_function)
 
             # If this is a new root function, create a CallGraph for it
-            if parsed.indent_level == 0 and not any(cg.function == current_function for cg in call_graphs):
+            if parsed.level == 0 and not any(cg.function == current_function for cg in call_graphs):
                 call_graphs.append(CallGraph(function=current_function, calls=[]))
 
     return call_graphs
 
-def calculate_total_stack_usage(function: Function, call_graph_map: Dict[str, CallGraph], 
-                               stack_usage_map: Dict[str, int], visited: Set[str] = None) -> int:
+def get_total_stack(function: Function, call_graph_map: Dict[str, CallGraph], 
+    stack_usage_map: Dict[str, StackData], visited: Set[str] = None) -> StackData:
     """
     Calculates the total stack usage for a function, considering recursive calls.
     
     Args:
         function: Function to calculate stack usage for
         call_graph_map: Mapping of functions to their call graphs
-        stack_usage_map: Mapping of functions to their stack usage
+        stack_usage_map: Mapping of functions to their stack usage data
         visited: Set of already visited functions to avoid infinite loops
         
     Returns:
@@ -181,31 +201,68 @@ def calculate_total_stack_usage(function: Function, call_graph_map: Dict[str, Ca
     # Create a unique key for the function
     function_key = f"{function.name}:{function.file}"
 
-    # If we've already visited this function, return 0 to avoid double counting
+    # If we've already visited this function, return neutral stack data
     if function_key in visited:
-        return 0
+        return StackData(
+            usage=0,
+            static=True,
+            bounded=True
+        )
 
     # Mark this function as visited
     visited.add(function_key)
 
     # Get the stack usage for this function
-    base_usage = stack_usage_map.get(function_key, 0)
+    stack_data = stack_usage_map.get(function_key)
+    base_usage = stack_data.usage if stack_data else 0
+    is_static = stack_data.static if stack_data else True
+    is_bounded = stack_data.bounded if stack_data else True
 
     # Get the call graph for this function
     call_graph = call_graph_map.get(function_key)
     if not call_graph:
-        return base_usage
+        return StackData(
+            usage=base_usage,
+            static=is_static,
+            bounded=is_bounded
+        )
 
     # Calculate the maximum stack usage of any call path
     max_call_path_usage = 0
+
     for called_function in call_graph.calls:
         called_key = f"{called_function.name}:{called_function.file}"
         # Skip self-recursive calls as they're already accounted for in the base usage
         if called_key != function_key:
-            call_usage = calculate_total_stack_usage(called_function, call_graph_map, stack_usage_map, visited.copy())
-            max_call_path_usage = max(max_call_path_usage, call_usage)
+            call_data = get_total_stack(
+                called_function,
+                call_graph_map,
+                stack_usage_map,
+                visited.copy()
+            )
+            max_call_path_usage = max(
+                max_call_path_usage, call_data.usage
+            )
+            is_static = is_static and call_data.static
+            is_bounded = is_bounded and call_data.bounded
 
-    return base_usage + max_call_path_usage
+    return StackData(
+        usage=base_usage + max_call_path_usage,
+        static=is_static,
+        bounded=is_bounded
+    )
+
+def get_function_key(function: Function) -> str:
+    """
+    Generates a unique key for a function based on its name and file.
+    
+    Args:
+        function: Function object to generate the key for
+        
+    Returns:
+        Unique string key for the function
+    """
+    return f"{function.name}:{function.file}"
 
 def generate_json_report(stack_usages: List[StackUsage], call_graphs: List[CallGraph]) -> List[FunctionReport]:
     """
@@ -219,38 +276,33 @@ def generate_json_report(stack_usages: List[StackUsage], call_graphs: List[CallG
         List of FunctionReport objects with stack usage information for each function
     """
     # Create mapping for easier lookup
-    stack_usage_map = {f"{su.function.name}:{su.function.file}": su.usage for su in stack_usages}
-    stack_type_map = {f"{su.function.name}:{su.function.file}": su.type for su in stack_usages}
-    call_graph_map = {f"{cg.function.name}:{cg.function.file}": cg for cg in call_graphs}
+    stack_usage_map = {get_function_key(su.function): su.stack for su in stack_usages}
+    call_graph_map = {get_function_key(cg.function): cg for cg in call_graphs}
 
     # Create the report data
     report_data = []
 
     for su in stack_usages:
         # Calculate total stack usage for this function
-        total_usage = calculate_total_stack_usage(su.function, call_graph_map, stack_usage_map)
+        total_stack = get_total_stack(su.function, call_graph_map, stack_usage_map)
 
         # Get the list of called functions
-        function_key = f"{su.function.name}:{su.function.file}"
-        call_graph = call_graph_map.get(function_key)
+        call_graph = call_graph_map.get(get_function_key(su.function))
         called_functions = []
 
         if call_graph:
             for called_func in call_graph.calls:
-                called_key = f"{called_func.name}:{called_func.file}"
-                # Calculate total usage for called function
-                called_total_usage = calculate_total_stack_usage(called_func, call_graph_map, stack_usage_map)
                 called_functions.append(CalledFunction(
                     function=called_func,
-                    total_usage=called_total_usage
+                    total_stack=get_total_stack(
+                        called_func, call_graph_map, stack_usage_map
+                    )
                 ))
-
         # Create the entry for this function
         entry = FunctionReport(
             function=su.function,
-            self_usage=su.usage,
-            total_usage=total_usage,
-            type=su.type,
+            self_stack=su.stack,
+            total_stack=total_stack,
             called_functions=called_functions
         )
 
@@ -278,14 +330,13 @@ def save_json_report(report_data: List[FunctionReport], output_path: str):
         {
             "file": report.function.file,
             "function": report.function.name,
-            "self_usage": report.self_usage,
-            "total_usage": report.total_usage,
-            "type": report.type,
-            "called_functions": [
+            "self": report.self_stack.serialize(),
+            "total": report.total_stack.serialize(),
+            "calls": [
                 {
                     "file": called.function.file,
                     "function": called.function.name,
-                    "total_usage": called.total_usage
+                    "total": called.total_stack.serialize()
                 }
                 # Sort called_functions before adding to dictionary
                 for called in sorted(report.called_functions, 
