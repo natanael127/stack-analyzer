@@ -270,6 +270,9 @@ def save_json_report(report_data: List[FunctionReport], output_path: str):
         report_data: List of report data
         output_path: Path where the file will be saved
     """
+    # Sort report_data before converting to dictionaries
+    report_data.sort(key=lambda x: (x.function.file, x.function.name))
+
     # Convert dataclass objects to dictionaries for JSON serialization
     json_data = [
         {
@@ -278,20 +281,20 @@ def save_json_report(report_data: List[FunctionReport], output_path: str):
             "direct_usage": report.direct_usage,
             "total_usage": report.total_usage,
             "type": report.type,
-            "called_functions": sorted([
+            "called_functions": [
                 {
                     "file": called.function.file,
                     "function": called.function.name,
                     "total_usage": called.total_usage
                 }
-                for called in report.called_functions
-            ], key=lambda x: (x["file"], x["function"]))
+                # Sort called_functions before adding to dictionary
+                for called in sorted(report.called_functions, 
+                    key=lambda x: (x.function.file, x.function.name)
+                )
+            ]
         }
         for report in report_data
     ]
-
-    # Sort json_data by file and function
-    json_data.sort(key=lambda x: (x["file"], x["function"]))
 
     with open(output_path, 'w') as file:
         json.dump(json_data, file, indent=2)
