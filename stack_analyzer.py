@@ -252,6 +252,18 @@ def get_total_stack(function: Function, call_graph_map: Dict[str, CallGraph],
         bounded=is_bounded
     )
 
+def get_function_key(function: Function) -> str:
+    """
+    Generates a unique key for a function based on its name and file.
+    
+    Args:
+        function: Function object to generate the key for
+        
+    Returns:
+        Unique string key for the function
+    """
+    return f"{function.name}:{function.file}"
+
 def generate_json_report(stack_usages: List[StackUsage], call_graphs: List[CallGraph]) -> List[FunctionReport]:
     """
     Generates a JSON report with stack analysis data.
@@ -264,8 +276,8 @@ def generate_json_report(stack_usages: List[StackUsage], call_graphs: List[CallG
         List of FunctionReport objects with stack usage information for each function
     """
     # Create mapping for easier lookup
-    stack_usage_map = {f"{su.function.name}:{su.function.file}": su.stack for su in stack_usages}
-    call_graph_map = {f"{cg.function.name}:{cg.function.file}": cg for cg in call_graphs}
+    stack_usage_map = {get_function_key(su.function): su.stack for su in stack_usages}
+    call_graph_map = {get_function_key(cg.function): cg for cg in call_graphs}
 
     # Create the report data
     report_data = []
@@ -275,8 +287,7 @@ def generate_json_report(stack_usages: List[StackUsage], call_graphs: List[CallG
         total_stack = get_total_stack(su.function, call_graph_map, stack_usage_map)
 
         # Get the list of called functions
-        function_key = f"{su.function.name}:{su.function.file}"
-        call_graph = call_graph_map.get(function_key)
+        call_graph = call_graph_map.get(get_function_key(su.function))
         called_functions = []
 
         if call_graph:
