@@ -56,7 +56,7 @@ add_compile_options(-fstack-usage)
 The tool expects cflow output in the GNU format with levels printed. Generate it using:
 
 ```bash
-cflow --format=gnu --print-level <source-files> > callgraph.txt
+cflow --all --format=gnu --print-level <source-files> > callgraph.txt
 ```
 
 ## Output Format
