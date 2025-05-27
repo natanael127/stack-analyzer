@@ -15,6 +15,12 @@ class StackData:
     usage: int
     static: bool
     bounded: bool
+    def serialize(self):
+        return {
+            "usage": self.usage,
+            "static": self.static,
+            "bounded": self.bounded
+        }
 
 @dataclass
 class StackUsage:
@@ -39,9 +45,8 @@ class CalledFunction:
 @dataclass
 class FunctionReport:
     function: Function
-    self_usage: int
-    total_usage: int
-    type: str
+    self_stack: StackData
+    total_stack: StackData
     called_functions: List[CalledFunction]
 
 def parse_su_file(file_path: str) -> List[StackUsage]:
@@ -259,25 +264,15 @@ def generate_json_report(stack_usages: List[StackUsage], call_graphs: List[CallG
                     function=called_func,
                     total_usage=called_total_usage
                 ))
-
-        # Determine the type string based on stack data
-        type_str = ""
-        if su.stack.static:
-            type_str += "static"
-        else:
-            type_str += "dynamic"
-        
-        if su.stack.bounded:
-            type_str += " bounded"
-        else:
-            type_str += " unbounded"
-
         # Create the entry for this function
         entry = FunctionReport(
             function=su.function,
-            self_usage=su.stack.usage,
-            total_usage=total_usage,
-            type=type_str,
+            self_stack=su.stack,
+            total_stack=StackData(
+                usage=total_usage,
+                static=su.stack.static,         # TODO: ajust it
+                bounded=su.stack.bounded        # TODO: ajust it
+            ),
             called_functions=called_functions
         )
 
@@ -305,9 +300,8 @@ def save_json_report(report_data: List[FunctionReport], output_path: str):
         {
             "file": report.function.file,
             "function": report.function.name,
-            "self_usage": report.self_usage,
-            "total_usage": report.total_usage,
-            "type": report.type,
+            "self_stack": report.self_stack.serialize(),
+            "total_stack": report.total_stack.serialize(),
             "called_functions": [
                 {
                     "file": called.function.file,
