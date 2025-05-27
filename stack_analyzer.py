@@ -11,10 +11,15 @@ class Function:
     file: str
 
 @dataclass
+class StackData:
+    usage: int
+    static: bool
+    bounded: bool
+
+@dataclass
 class StackUsage:
     function: Function
-    usage: int
-    type: str
+    stack: StackData
 
 @dataclass
 class CallGraph:
@@ -58,10 +63,20 @@ def parse_su_file(file_path: str) -> List[StackUsage]:
             if match:
                 source_file, _, _, function_name, usage, usage_type = match.groups()
                 function = Function(file=source_file, name=function_name)
+                is_static = False
+                explicitly_bounded = False
+                if "static" in usage_type:
+                    is_static = True
+                if "bounded" in usage_type:
+                    explicitly_bounded = True
+                stack_data = StackData(
+                    usage=int(usage),
+                    static=is_static,
+                    bounded=explicitly_bounded or is_static
+                )
                 stack_usage = StackUsage(
                     function=function,
-                    usage=int(usage),
-                    type=usage_type
+                    stack=stack_data
                 )
                 stack_usages.append(stack_usage)
 
@@ -162,14 +177,14 @@ def parse_cflow_file(file_path: str) -> List[CallGraph]:
     return call_graphs
 
 def calculate_total_stack_usage(function: Function, call_graph_map: Dict[str, CallGraph], 
-                               stack_usage_map: Dict[str, int], visited: Set[str] = None) -> int:
+                               stack_usage_map: Dict[str, StackData], visited: Set[str] = None) -> int:
     """
     Calculates the total stack usage for a function, considering recursive calls.
     
     Args:
         function: Function to calculate stack usage for
         call_graph_map: Mapping of functions to their call graphs
-        stack_usage_map: Mapping of functions to their stack usage
+        stack_usage_map: Mapping of functions to their stack usage data
         visited: Set of already visited functions to avoid infinite loops
         
     Returns:
@@ -189,7 +204,8 @@ def calculate_total_stack_usage(function: Function, call_graph_map: Dict[str, Ca
     visited.add(function_key)
 
     # Get the stack usage for this function
-    base_usage = stack_usage_map.get(function_key, 0)
+    stack_data = stack_usage_map.get(function_key)
+    base_usage = stack_data.usage if stack_data else 0
 
     # Get the call graph for this function
     call_graph = call_graph_map.get(function_key)
@@ -219,8 +235,7 @@ def generate_json_report(stack_usages: List[StackUsage], call_graphs: List[CallG
         List of FunctionReport objects with stack usage information for each function
     """
     # Create mapping for easier lookup
-    stack_usage_map = {f"{su.function.name}:{su.function.file}": su.usage for su in stack_usages}
-    stack_type_map = {f"{su.function.name}:{su.function.file}": su.type for su in stack_usages}
+    stack_usage_map = {f"{su.function.name}:{su.function.file}": su.stack for su in stack_usages}
     call_graph_map = {f"{cg.function.name}:{cg.function.file}": cg for cg in call_graphs}
 
     # Create the report data
@@ -245,12 +260,24 @@ def generate_json_report(stack_usages: List[StackUsage], call_graphs: List[CallG
                     total_usage=called_total_usage
                 ))
 
+        # Determine the type string based on stack data
+        type_str = ""
+        if su.stack.static:
+            type_str += "static"
+        else:
+            type_str += "dynamic"
+        
+        if su.stack.bounded:
+            type_str += " bounded"
+        else:
+            type_str += " unbounded"
+
         # Create the entry for this function
         entry = FunctionReport(
             function=su.function,
-            self_usage=su.usage,
+            self_usage=su.stack.usage,
             total_usage=total_usage,
-            type=su.type,
+            type=type_str,
             called_functions=called_functions
         )
 
