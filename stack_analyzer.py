@@ -311,7 +311,9 @@ def main():
     """
     parser = argparse.ArgumentParser(description='Analyze stack usage from compiler output and cflow files')
     parser.add_argument('--su-dir', required=True, help='Directory to recursively search for .su files')
-    parser.add_argument('--cflow-file', required=True, help='Path to the cflow output file')
+    parser.add_argument('--cflow-file', required=True,
+        help='Path to the cflow output file (options --print-level and --format=gnu are required for good parsing)'
+    )
     parser.add_argument('--output', default='stack_analysis.json', help='Path to output JSON report file (default: %(default)s)')
 
     args = parser.parse_args()
