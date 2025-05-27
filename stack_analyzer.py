@@ -300,9 +300,9 @@ def save_json_report(report_data: List[FunctionReport], output_path: str):
         {
             "file": report.function.file,
             "function": report.function.name,
-            "self_stack": report.self_stack.serialize(),
-            "total_stack": report.total_stack.serialize(),
-            "called_functions": [
+            "self": report.self_stack.serialize(),
+            "total": report.total_stack.serialize(),
+            "calls": [
                 {
                     "file": called.function.file,
                     "function": called.function.name,
