@@ -9,17 +9,23 @@ from typing import List, Dict, Optional, Set
 class Function:
     name: str
     file: str
+    def serialize(self):
+        return {
+            "file": self.file,
+            "function": self.name,
+        }
 
 @dataclass
 class StackData:
     usage: int
     static: bool
     bounded: bool
+
     def serialize(self):
         return {
             "usage": self.usage,
             "static": self.static,
-            "bounded": self.bounded
+            "bounded": self.bounded,
         }
 
 @dataclass
@@ -42,12 +48,31 @@ class CalledFunction:
     function: Function
     total_stack: StackData
 
+    def serialize(self):
+        return {
+            **self.function.serialize(),
+            "total": self.total_stack.serialize()
+        }
+
 @dataclass
 class FunctionReport:
     function: Function
     self_stack: StackData
     total_stack: StackData
     called_functions: List[CalledFunction]
+
+    def serialize(self):
+        return {
+            **self.function.serialize(),
+            "self": self.self_stack.serialize(),
+            "total": self.total_stack.serialize(),
+            "calls": [
+                called.serialize() 
+                for called in sorted(self.called_functions, 
+                    key=lambda x: (x.function.file, x.function.name)
+                )
+            ]
+        }
 
 def parse_su_file(file_path: str) -> List[StackUsage]:
     """
@@ -321,30 +346,11 @@ def save_json_report(report_data: List[FunctionReport], output_path: str):
         report_data: List of report data
         output_path: Path where the file will be saved
     """
-    # Sort report_data before converting to dictionaries
+    # Sort report_data before serializing
     report_data.sort(key=lambda x: (x.function.file, x.function.name))
 
-    # Convert dataclass objects to dictionaries for JSON serialization
-    json_data = [
-        {
-            "file": report.function.file,
-            "function": report.function.name,
-            "self": report.self_stack.serialize(),
-            "total": report.total_stack.serialize(),
-            "calls": [
-                {
-                    "file": called.function.file,
-                    "function": called.function.name,
-                    "total": called.total_stack.serialize()
-                }
-                # Sort called_functions before adding to dictionary
-                for called in sorted(report.called_functions, 
-                    key=lambda x: (x.function.file, x.function.name)
-                )
-            ]
-        }
-        for report in report_data
-    ]
+    # Use the serialize methods to convert objects to dictionaries
+    json_data = [report.serialize() for report in report_data]
 
     with open(output_path, 'w') as file:
         json.dump(json_data, file, indent=2)
