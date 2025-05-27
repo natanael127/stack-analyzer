@@ -181,8 +181,8 @@ def parse_cflow_file(file_path: str) -> List[CallGraph]:
 
     return call_graphs
 
-def calculate_total_stack_usage(function: Function, call_graph_map: Dict[str, CallGraph], 
-                               stack_usage_map: Dict[str, StackData], visited: Set[str] = None) -> StackData:
+def get_total_stack(function: Function, call_graph_map: Dict[str, CallGraph], 
+    stack_usage_map: Dict[str, StackData], visited: Set[str] = None) -> StackData:
     """
     Calculates the total stack usage for a function, considering recursive calls.
     
@@ -234,7 +234,7 @@ def calculate_total_stack_usage(function: Function, call_graph_map: Dict[str, Ca
         called_key = f"{called_function.name}:{called_function.file}"
         # Skip self-recursive calls as they're already accounted for in the base usage
         if called_key != function_key:
-            call_data = calculate_total_stack_usage(
+            call_data = get_total_stack(
                 called_function,
                 call_graph_map,
                 stack_usage_map,
@@ -272,7 +272,7 @@ def generate_json_report(stack_usages: List[StackUsage], call_graphs: List[CallG
 
     for su in stack_usages:
         # Calculate total stack usage for this function
-        total_stack = calculate_total_stack_usage(su.function, call_graph_map, stack_usage_map)
+        total_stack = get_total_stack(su.function, call_graph_map, stack_usage_map)
 
         # Get the list of called functions
         function_key = f"{su.function.name}:{su.function.file}"
@@ -282,7 +282,7 @@ def generate_json_report(stack_usages: List[StackUsage], call_graphs: List[CallG
         if call_graph:
             for called_func in call_graph.calls:
                 # Calculate total usage for called function
-                called_total = calculate_total_stack_usage(called_func, call_graph_map, stack_usage_map)
+                called_total = get_total_stack(called_func, call_graph_map, stack_usage_map)
                 called_functions.append(CalledFunction(
                     function=called_func,
                     total_usage=called_total.usage
