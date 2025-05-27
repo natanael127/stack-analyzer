@@ -29,7 +29,7 @@ class CallGraph:
 @dataclass
 class CflowLine:
     function: Function
-    indent_level: int
+    level: int
 
 @dataclass
 class CalledFunction:
@@ -122,7 +122,7 @@ def parse_cflow_line(line: str) -> Optional[CflowLine]:
         function_name = match.group(2)
         source_file = match.group(3)
         return CflowLine(
-            indent_level=indent_level,
+            level=indent_level,
             function=Function(name=function_name, file=source_file)
         )
     return None
@@ -149,11 +149,11 @@ def parse_cflow_file(file_path: str) -> List[CallGraph]:
             current_function = parsed.function
 
             # Adjust call stack based on indentation level
-            while len(call_stack) > parsed.indent_level:
+            while len(call_stack) > parsed.level:
                 call_stack.pop()
 
             # Create CallGraph entry for the parent function if it exists
-            if call_stack and parsed.indent_level > 0:
+            if call_stack and parsed.level > 0:
                 parent = call_stack[-1]
                 # Find if we already have a CallGraph for this parent
                 parent_graph = next((cg for cg in call_graphs if cg.function == parent), None)
@@ -171,7 +171,7 @@ def parse_cflow_file(file_path: str) -> List[CallGraph]:
             call_stack.append(current_function)
 
             # If this is a new root function, create a CallGraph for it
-            if parsed.indent_level == 0 and not any(cg.function == current_function for cg in call_graphs):
+            if parsed.level == 0 and not any(cg.function == current_function for cg in call_graphs):
                 call_graphs.append(CallGraph(function=current_function, calls=[]))
 
     return call_graphs
