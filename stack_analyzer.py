@@ -165,8 +165,7 @@ def parse_cflow_file(file_path: str) -> List[CallGraph]:
 
                 if parent_graph:
                     # Check if this function call is already in the parent's calls
-                    if not any(f.name == current_function.name and 
-                               f.file == current_function.file for f in parent_graph.calls):
+                    if not any(f == current_function for f in parent_graph.calls):
                         parent_graph.calls.append(current_function)
                 else:
                     # Create new CallGraph for this parent
