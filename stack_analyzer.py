@@ -29,11 +29,6 @@ class StackData:
         }
 
 @dataclass
-class StackUsage:
-    function: Function
-    stack: StackData
-
-@dataclass
 class CallGraph:
     function: Function
     calls: list[Function]
@@ -44,31 +39,30 @@ class CflowLine:
     level: int
 
 @dataclass
-class CalledFunction:
+class StackUsage:
     function: Function
-    total_stack: StackData
+    self_stack: Optional[StackData] = None
+    total_stack: Optional[StackData] = None
 
     def serialize(self):
-        return {
-            **self.function.serialize(),
-            "total": self.total_stack.serialize()
-        }
+        output = self.function.serialize()
+        if self.self_stack:
+            output["self"] = self.self_stack.serialize()
+        if self.total_stack:
+            output["total"] = self.total_stack.serialize()
+        return output
 
 @dataclass
 class FunctionReport:
-    function: Function
-    self_stack: StackData
-    total_stack: StackData
-    called_functions: List[CalledFunction]
+    result: StackUsage
+    called: List[StackUsage]
 
     def serialize(self):
         return {
-            **self.function.serialize(),
-            "self": self.self_stack.serialize(),
-            "total": self.total_stack.serialize(),
+            **self.result.serialize(),
             "calls": [
                 called.serialize() 
-                for called in sorted(self.called_functions, 
+                for called in sorted(self.called, 
                     key=lambda x: (x.function.file, x.function.name)
                 )
             ]
@@ -106,7 +100,7 @@ def parse_su_file(file_path: str) -> List[StackUsage]:
                 )
                 stack_usage = StackUsage(
                     function=function,
-                    stack=stack_data
+                    self_stack=stack_data,
                 )
                 stack_usages.append(stack_usage)
 
@@ -300,7 +294,7 @@ def generate_report_data(stack_usages: List[StackUsage], call_graphs: List[CallG
         List of FunctionReport objects with stack usage information for each function
     """
     # Create mapping for easier lookup
-    stack_usage_map = {get_function_key(su.function): su.stack for su in stack_usages}
+    stack_usage_map = {get_function_key(su.function): su.self_stack for su in stack_usages}
     call_graph_map = {get_function_key(cg.function): cg for cg in call_graphs}
 
     # Create the report data
@@ -316,7 +310,7 @@ def generate_report_data(stack_usages: List[StackUsage], call_graphs: List[CallG
 
         if call_graph:
             for called_func in call_graph.calls:
-                called_functions.append(CalledFunction(
+                called_functions.append(StackUsage(
                     function=called_func,
                     total_stack=get_total_stack(
                         called_func, call_graph_map, stack_usage_map
@@ -324,10 +318,12 @@ def generate_report_data(stack_usages: List[StackUsage], call_graphs: List[CallG
                 ))
         # Create the entry for this function
         entry = FunctionReport(
-            function=su.function,
-            self_stack=su.stack,
-            total_stack=total_stack,
-            called_functions=called_functions
+            StackUsage(
+                function=su.function,
+                self_stack=su.self_stack,
+                total_stack=total_stack
+            ),
+            called=called_functions
         )
 
         report_data.append(entry)
@@ -342,7 +338,7 @@ def save_json_report(report_data: List[FunctionReport], output_path: str):
         report_data: List of FunctionReport objects
         output_path: Path where the file will be saved
     """
-    report_data.sort(key=lambda x: (x.function.file, x.function.name))
+    report_data.sort(key=lambda x: (x.result.function.file, x.result.function.name))
     json_data = [report.serialize() for report in report_data]
     with open(output_path, 'w') as file:
         json.dump(json_data, file, indent=2)
