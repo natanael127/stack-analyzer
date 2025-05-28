@@ -62,15 +62,12 @@ class FunctionReport:
     called: List[StackUsage]
 
     def serialize(self):
-        return {
-            **self.result.serialize(),
-            "calls": [
-                called.serialize() 
-                for called in sorted(self.called, 
-                    key=lambda x: (x.function.file, x.function.name)
-                )
-            ]
-        }
+        output = self.result.serialize()
+        output["calls"] = []
+        if self.called:
+            for called in sorted(self.called, key=lambda x: (x.function.file, x.function.name)):
+                output["calls"].append(called.serialize())
+        return output
 
 def parse_su_file(file_path: str) -> List[StackUsage]:
     """
