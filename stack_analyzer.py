@@ -2,7 +2,7 @@ import os
 import re
 import json
 import argparse
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import List, Dict, Optional, Set
 
 @dataclass
@@ -250,23 +250,17 @@ def get_total_stack(function: Function, call_graph_map: Dict[str, CallGraph],
     # Mark this function as visited
     visited.add(function_key)
 
-    # Get the stack usage for this function
-    base_usage = 0
-    is_static = True
-    is_bounded = True
-    untracked = set()
+    # Get the stack stats for this function
+    accumulated = None
     stack_data = stack_usage_map.get(function_key)
-    if stack_data and stack_data.stats:
-        base_usage = stack_data.stats.usage
-        is_static = stack_data.stats.static
-        is_bounded = stack_data.stats.bounded
-    else:
-        untracked.add(function.name)
+    if stack_data is not None:
+        accumulated = replace(stack_data.stats)
 
     # Get the call graph for this function
     call_graph = call_graph_map.get(function_key)
     max_call_path_usage = 0
-    if call_graph:
+    untracked = set()
+    if call_graph and accumulated:
         for called_function in call_graph.calls:
             called_key = f"{called_function.name}:{called_function.file}"
             # Skip self-recursive calls as they're already accounted for in the base usage
@@ -281,17 +275,16 @@ def get_total_stack(function: Function, call_graph_map: Dict[str, CallGraph],
                     max_call_path_usage = max(
                         max_call_path_usage, call_data.stats.usage
                     )
-                    is_static = is_static and call_data.stats.static
-                    is_bounded = is_bounded and call_data.stats.bounded
+                    accumulated.static = accumulated.static and call_data.stats.static
+                    accumulated.bounded = accumulated.bounded and call_data.stats.bounded
+                else:
+                    untracked.add(called_function.name)
                 if call_data.untracked:
                     untracked.update(call_data.untracked)
+        accumulated.usage += max_call_path_usage
 
     return StackData(
-        stats=StackStats(
-            usage=base_usage + max_call_path_usage,
-            static=is_static,
-            bounded=is_bounded
-        ),
+        stats=accumulated,
         untracked=untracked,
     )
 
