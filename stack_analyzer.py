@@ -16,18 +16,26 @@ class Function:
         }
 
 @dataclass
-class StackData:
-    usage: int
-    static: bool
-    bounded: bool
-    untracked: Optional[Set[str]] = None
-
+class StackStats:
+    usage: int = 0
+    static: bool = True
+    bounded: bool = True
     def serialize(self):
-        output = {
+        return {
             "usage": self.usage,
             "static": self.static,
             "bounded": self.bounded,
         }
+
+@dataclass
+class StackData:
+    stats: Optional[StackStats] = None
+    untracked: Optional[Set[str]] = None
+
+    def serialize(self):
+        output = {}
+        if self.stats:
+            output = self.stats.serialize()
         if self.untracked and len(self.untracked) > 0:
             output["untracked"] = list(self.untracked)
         return output
@@ -94,11 +102,12 @@ def parse_su_file(file_path: str) -> List[StackUsage]:
                     is_static = True
                 if "bounded" in usage_type:
                     explicitly_bounded = True
-                stack_data = StackData(
+                stack_stats = StackStats(
                     usage=int(usage),
                     static=is_static,
                     bounded=explicitly_bounded or is_static
                 )
+                stack_data = StackData(stats=stack_stats)
                 stack_usage = StackUsage(
                     function=function,
                     self_stack=stack_data,
@@ -236,11 +245,7 @@ def get_total_stack(function: Function, call_graph_map: Dict[str, CallGraph],
 
     # If we've already visited this function, return neutral stack data
     if function_key in visited:
-        return StackData(
-            usage=0,
-            static=True,
-            bounded=True
-        )
+        return StackData(stats=StackStats())
 
     # Mark this function as visited
     visited.add(function_key)
@@ -251,10 +256,10 @@ def get_total_stack(function: Function, call_graph_map: Dict[str, CallGraph],
     is_bounded = True
     untracked = set()
     stack_data = stack_usage_map.get(function_key)
-    if stack_data:
-        base_usage = stack_data.usage
-        is_static = stack_data.static
-        is_bounded = stack_data.bounded
+    if stack_data and stack_data.stats:
+        base_usage = stack_data.stats.usage
+        is_static = stack_data.stats.static
+        is_bounded = stack_data.stats.bounded
     else:
         untracked.add(function.name)
 
@@ -272,17 +277,21 @@ def get_total_stack(function: Function, call_graph_map: Dict[str, CallGraph],
                     stack_usage_map,
                     visited.copy()
                 )
-                max_call_path_usage = max(
-                    max_call_path_usage, call_data.usage
-                )
-                is_static = is_static and call_data.static
-                is_bounded = is_bounded and call_data.bounded
-                untracked.update(call_data.untracked)
+                if call_data.stats:
+                    max_call_path_usage = max(
+                        max_call_path_usage, call_data.stats.usage
+                    )
+                    is_static = is_static and call_data.stats.static
+                    is_bounded = is_bounded and call_data.stats.bounded
+                if call_data.untracked:
+                    untracked.update(call_data.untracked)
 
     return StackData(
-        usage=base_usage + max_call_path_usage,
-        static=is_static,
-        bounded=is_bounded,
+        stats=StackStats(
+            usage=base_usage + max_call_path_usage,
+            static=is_static,
+            bounded=is_bounded
+        ),
         untracked=untracked,
     )
 
