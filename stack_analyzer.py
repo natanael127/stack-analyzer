@@ -20,13 +20,17 @@ class StackData:
     usage: int
     static: bool
     bounded: bool
+    untracked: Optional[Set[str]] = None
 
     def serialize(self):
-        return {
+        output = {
             "usage": self.usage,
             "static": self.static,
             "bounded": self.bounded,
         }
+        if self.untracked and len(self.untracked) > 0:
+            output["untracked"] = list(self.untracked)
+        return output
 
 @dataclass
 class CallGraph:
@@ -140,16 +144,30 @@ def parse_cflow_line(line: str) -> Optional[CflowLine]:
     Returns:
         CflowLine object containing line information, or None if the line doesn't contain valid information
     """
+    output = None
+
+    # Complete match {indent_level} function_name() at source_file:line_number
     match = re.match(r'{\s*(\d+)\}\s+(\S+)\(\).*at\s+([^:]+):(\d+)', line)
     if match:
         indent_level = int(match.group(1))
         function_name = match.group(2)
         source_file = match.group(3)
-        return CflowLine(
+        output = CflowLine(
             level=indent_level,
             function=Function(name=function_name, file=source_file)
         )
-    return None
+    # Incomplete match {indent_level} function_name()
+    else:
+        match = re.match(r'{\s*(\d+)\}\s+(\S+)\(\)', line)
+        if match:
+            indent_level = int(match.group(1))
+            function_name = match.group(2)
+            output = CflowLine(
+                level=indent_level,
+                function=Function(name=function_name, file="")
+            )
+
+    return output
 
 def parse_cflow_file(file_path: str) -> List[CallGraph]:
     """
@@ -231,10 +249,17 @@ def get_total_stack(function: Function, call_graph_map: Dict[str, CallGraph],
     visited.add(function_key)
 
     # Get the stack usage for this function
+    base_usage = 0
+    is_static = True
+    is_bounded = True
+    untracked = set()
     stack_data = stack_usage_map.get(function_key)
-    base_usage = stack_data.usage if stack_data else 0
-    is_static = stack_data.static if stack_data else True
-    is_bounded = stack_data.bounded if stack_data else True
+    if stack_data:
+        base_usage = stack_data.usage
+        is_static = stack_data.static
+        is_bounded = stack_data.bounded
+    else:
+        untracked.add(function.name)
 
     # Get the call graph for this function
     call_graph = call_graph_map.get(function_key)
@@ -242,7 +267,8 @@ def get_total_stack(function: Function, call_graph_map: Dict[str, CallGraph],
         return StackData(
             usage=base_usage,
             static=is_static,
-            bounded=is_bounded
+            bounded=is_bounded,
+            untracked=untracked,
         )
 
     # Calculate the maximum stack usage of any call path
@@ -263,11 +289,13 @@ def get_total_stack(function: Function, call_graph_map: Dict[str, CallGraph],
             )
             is_static = is_static and call_data.static
             is_bounded = is_bounded and call_data.bounded
+            untracked.update(call_data.untracked)
 
     return StackData(
         usage=base_usage + max_call_path_usage,
         static=is_static,
-        bounded=is_bounded
+        bounded=is_bounded,
+        untracked=untracked,
     )
 
 def get_function_key(function: Function) -> str:
