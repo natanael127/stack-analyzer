@@ -235,7 +235,7 @@ def get_total_stack(function: Function, call_graph_map: Dict[str, CallGraph],
         visited = set()
 
     # Create a unique key for the function
-    function_key = f"{function.name}:{function.file}"
+    function_key = get_function_key(function)
 
     # If we've already visited this function, return neutral stack data
     if function_key in visited:
