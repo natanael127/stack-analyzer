@@ -263,33 +263,24 @@ def get_total_stack(function: Function, call_graph_map: Dict[str, CallGraph],
 
     # Get the call graph for this function
     call_graph = call_graph_map.get(function_key)
-    if not call_graph:
-        return StackData(
-            usage=base_usage,
-            static=is_static,
-            bounded=is_bounded,
-            untracked=untracked,
-        )
-
-    # Calculate the maximum stack usage of any call path
     max_call_path_usage = 0
-
-    for called_function in call_graph.calls:
-        called_key = f"{called_function.name}:{called_function.file}"
-        # Skip self-recursive calls as they're already accounted for in the base usage
-        if called_key != function_key:
-            call_data = get_total_stack(
-                called_function,
-                call_graph_map,
-                stack_usage_map,
-                visited.copy()
-            )
-            max_call_path_usage = max(
-                max_call_path_usage, call_data.usage
-            )
-            is_static = is_static and call_data.static
-            is_bounded = is_bounded and call_data.bounded
-            untracked.update(call_data.untracked)
+    if call_graph:
+        for called_function in call_graph.calls:
+            called_key = f"{called_function.name}:{called_function.file}"
+            # Skip self-recursive calls as they're already accounted for in the base usage
+            if called_key != function_key:
+                call_data = get_total_stack(
+                    called_function,
+                    call_graph_map,
+                    stack_usage_map,
+                    visited.copy()
+                )
+                max_call_path_usage = max(
+                    max_call_path_usage, call_data.usage
+                )
+                is_static = is_static and call_data.static
+                is_bounded = is_bounded and call_data.bounded
+                untracked.update(call_data.untracked)
 
     return StackData(
         usage=base_usage + max_call_path_usage,
