@@ -298,7 +298,7 @@ def get_function_key(function: Function) -> str:
     Returns:
         Unique string key for the function
     """
-    return f"{function.name}:{function.file}"
+    return f"{function.name}:{os.path.basename(function.file)}"
 
 def generate_report_data(stack_usages: List[StackUsage], call_graphs: List[CallGraph]) -> List[FunctionReport]:
     """
