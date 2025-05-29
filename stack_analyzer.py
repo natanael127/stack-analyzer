@@ -262,7 +262,7 @@ def get_total_stack(function: Function, call_graph_map: Dict[str, CallGraph],
     untracked = set()
     if call_graph and accumulated:
         for called_function in call_graph.calls:
-            called_key = f"{called_function.name}:{called_function.file}"
+            called_key = get_function_key(called_function)
             # Skip self-recursive calls as they're already accounted for in the base usage
             if called_key != function_key:
                 call_data = get_total_stack(
